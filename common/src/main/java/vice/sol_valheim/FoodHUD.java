@@ -101,15 +101,19 @@ public class FoodHUD implements ClientGuiEvent.RenderHud
                 FastColor.ARGB32.color(180, 255, 10, 10) :
                 FastColor.ARGB32.color(96, 0, 0, 0);
 
-        var time = (float) food.ticksLeft / (20 * 60);
+        int wholeSeconds = Math.max(0, food.ticksLeft / 20);
         var scale = useLargeIcons ? 0.75f : 0.5f;
-        var isSeconds = false;
-        if (time < 1f)
+        boolean isSeconds = wholeSeconds < 60;
+        String timeText;
+        if (isSeconds)
         {
-            isSeconds = true;
-            time =  (float) food.ticksLeft / 20;
+            timeText = wholeSeconds + "s";
         }
-        var timeText = String.format("%.0f", time);
+        else
+        {
+            int roundedMinutes = Math.max(1, Math.round((float) food.ticksLeft / (20 * 60)));
+            timeText = roundedMinutes + "m";
+        }
 
         var pose = #if PRE_CURRENT_MC_1_19_2 graphics #elif POST_CURRENT_MC_1_20_1 graphics.pose(); #endif;
 
