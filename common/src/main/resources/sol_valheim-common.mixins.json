@@ -7,6 +7,7 @@
     "CakeBlockMixin",
     "ItemMixin",
     "LivingEntityDamageAccessor",
+    "LivingEntityUseMixin",
     "PlayerEntityMixin",
     "ServerLevelMixin",
     "ServerPlayerMixin"
