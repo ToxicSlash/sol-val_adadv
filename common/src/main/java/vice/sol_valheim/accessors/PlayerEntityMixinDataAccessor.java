@@ -1,0 +1,10 @@
+package vice.sol_valheim.accessors;
+
+import vice.sol_valheim.ValheimFoodData;
+
+public interface PlayerEntityMixinDataAccessor
+{
+    ValheimFoodData sol_valheim$getFoodData();
+    void sol_valheim$setFoodDataFromServer(ValheimFoodData data);
+    void sol_valheim$serverTickFood(long gameTime);
+}

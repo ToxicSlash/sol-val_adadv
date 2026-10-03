@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "solvalheimtickfix",
+  "version": "${version}",
+  "name": "SOL Valheim Tick Fix",
+  "description": "Forces Spice of Life Valheim food timers to tick under no-tick player optimizations.",
+  "authors": [
+    "Example"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.example.solvalheimtickfix.SolValheimTickFix"
+    ]
+  },
+  "mixins": [
+    "solvalheimtickfix.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.15.11",
+    "minecraft": "~1.20.1",
+    "java": ">=17",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": "*",
+    "sol_valheim": "*"
+  },
+  "custom": {
+    "modmenu": {
+      "badges": [
+        "library"
+      ]
+    }
+  }
+}
