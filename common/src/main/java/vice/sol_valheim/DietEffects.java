@@ -4,14 +4,14 @@ import dev.architectury.registry.registries.RegistrySupplier;
 import net.minecraft.world.effect.MobEffect;
 
 public final class DietEffects {
-    public static RegistrySupplier<MobEffect> BUILDERS_BLESSING;
-    public static RegistrySupplier<MobEffect> GREATER_BUILDERS_BLESSING;
-    public static RegistrySupplier<MobEffect> MINERS_BLESSING;
-    public static RegistrySupplier<MobEffect> GREATER_MINERS_BLESSING;
-    public static RegistrySupplier<MobEffect> WARRIORS_BLESSING;
-    public static RegistrySupplier<MobEffect> GREATER_WARRIORS_BLESSING;
-    public static RegistrySupplier<MobEffect> WAYFARERS_BLESSING;
-    public static RegistrySupplier<MobEffect> GREATER_WAYFARERS_BLESSING;
+    public static RegistrySupplier<? extends MobEffect> BUILDERS_BLESSING;
+    public static RegistrySupplier<? extends MobEffect> GREATER_BUILDERS_BLESSING;
+    public static RegistrySupplier<? extends MobEffect> MINERS_BLESSING;
+    public static RegistrySupplier<? extends MobEffect> GREATER_MINERS_BLESSING;
+    public static RegistrySupplier<? extends MobEffect> WARRIORS_BLESSING;
+    public static RegistrySupplier<? extends MobEffect> GREATER_WARRIORS_BLESSING;
+    public static RegistrySupplier<? extends MobEffect> WAYFARERS_BLESSING;
+    public static RegistrySupplier<? extends MobEffect> GREATER_WAYFARERS_BLESSING;
 
     private static boolean registered;
 
