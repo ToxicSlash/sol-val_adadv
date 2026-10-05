@@ -33,15 +33,19 @@ public final class DietFabricHooks {
             if (!success || !DietConfig.reload())
                 return;
 
+            // Send only after the external file has been re-read; this avoids
+            // relying on ordering between Fabric's reload/sync callbacks.
             for (var player : server.getPlayerList().getPlayers()) {
                 var data = ((DietDataAccessor) player).sol_valheim$getDietData();
                 DietSystem.onConfigReload(player, data);
+                DietSync.sendToPlayer(player);
             }
         });
 
-        // Fires on join and after a successful /reload. Send each authoritative
-        // dataset once here rather than duplicating packets in the reload hook.
         ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register((player, joined) -> {
+            if (!joined)
+                return;
+
             DietSync.sendToPlayer(player);
             SOLValheim.syncFoodData(player, ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData());
         });
