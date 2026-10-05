@@ -5,10 +5,13 @@ import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class DietSync {
     public static final ResourceLocation CHANNEL = new ResourceLocation(SOLValheim.MOD_ID, "diet_config");
     private static final int MAX_CONFIG_BYTES = 1_048_576;
+    private static final Logger LOGGER = LoggerFactory.getLogger("sol_valheim/diet_sync");
 
     private DietSync() {
     }
@@ -25,8 +28,10 @@ public final class DietSync {
             return;
 
         String json = DietConfig.toJson();
-        if (json.length() > MAX_CONFIG_BYTES)
-            throw new IllegalStateException("Diet config is too large to synchronize: " + json.length() + " characters");
+        if (json.length() > MAX_CONFIG_BYTES) {
+            LOGGER.error("Diet config is too large to synchronize ({} characters); skipping sync for {}", json.length(), player.getScoreboardName());
+            return;
+        }
 
         var buf = new FriendlyByteBuf(Unpooled.buffer());
         buf.writeUtf(json, MAX_CONFIG_BYTES);
