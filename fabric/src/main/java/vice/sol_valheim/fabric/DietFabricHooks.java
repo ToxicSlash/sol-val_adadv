@@ -6,7 +6,9 @@ import net.minecraft.commands.Commands;
 import vice.sol_valheim.DietConfig;
 import vice.sol_valheim.DietSync;
 import vice.sol_valheim.DietSystem;
+import vice.sol_valheim.SOLValheim;
 import vice.sol_valheim.accessors.DietDataAccessor;
+import vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor;
 
 public final class DietFabricHooks {
     private static boolean initialized;
@@ -34,13 +36,14 @@ public final class DietFabricHooks {
             for (var player : server.getPlayerList().getPlayers()) {
                 var data = ((DietDataAccessor) player).sol_valheim$getDietData();
                 DietSystem.onConfigReload(player, data);
-                DietSync.sendToPlayer(player);
             }
         });
 
-        // This also covers first join. END_DATA_PACK_RELOAD explicitly resends
-        // after re-reading the external config so ordering cannot leave clients
-        // with the old tooltip map.
-        ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register((player, joined) -> DietSync.sendToPlayer(player));
+        // Fires on join and after a successful /reload. Send each authoritative
+        // dataset once here rather than duplicating packets in the reload hook.
+        ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register((player, joined) -> {
+            DietSync.sendToPlayer(player);
+            SOLValheim.syncFoodData(player, ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData());
+        });
     }
 }
