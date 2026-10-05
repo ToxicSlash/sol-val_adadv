@@ -220,7 +220,6 @@ public class ValheimFoodData
     public CompoundTag save(CompoundTag tag) {
         int count = 0;
         tag.putInt("max_slots", MaxItemSlots);
-        tag.putInt("count", ItemEntries.size());
         for (var item : ItemEntries)
         {
             var registryName = item.item.getItem().arch$registryName();
@@ -275,10 +274,10 @@ public class ValheimFoodData
         int drinkTicks = tag.getInt("drinkticks");
         if (!drink.isBlank() && drinkTicks > 0)
         {
-            ItemStack stack = sol_valheim$readStack(drink, tag, "drinkData");
-            if (stack == null && tag.contains("drinkData" + size))
-                stack = sol_valheim$readStack(drink, tag, "drinkData" + size);
-
+            String drinkDataKey = tag.contains("drinkData")
+                    ? "drinkData"
+                    : (tag.contains("drinkData" + size) ? "drinkData" + size : null);
+            ItemStack stack = sol_valheim$readStack(drink, tag, drinkDataKey);
             if (stack != null) {
                 var eaten = new EatenFoodItem(stack, drinkTicks);
                 if (sol_valheim$isValidFoodEntry(eaten))
