@@ -22,19 +22,15 @@ public final class DietEffects {
         if (registered)
             return;
 
-        // Attribute bonuses are applied by DietSystem at runtime rather than
-        // attached here. This lets optional-mod attributes resolve after every
-        // mod has finished registering its own attributes.
+        // These effects are visible/status markers. Their attribute modifiers
+        // are applied by DietSystem from the startup config at runtime, which
+        // also lets optional-mod attributes resolve safely after registration.
         BUILDERS_BLESSING = SOLValheim.MOB_EFFECTS.register("builders_blessing", DietBlessingEffect::new);
         GREATER_BUILDERS_BLESSING = SOLValheim.MOB_EFFECTS.register("greater_builders_blessing", DietBlessingEffect::new);
         MINERS_BLESSING = SOLValheim.MOB_EFFECTS.register("miners_blessing", DietBlessingEffect::new);
         GREATER_MINERS_BLESSING = SOLValheim.MOB_EFFECTS.register("greater_miners_blessing", DietBlessingEffect::new);
         WARRIORS_BLESSING = SOLValheim.MOB_EFFECTS.register("warriors_blessing", DietBlessingEffect::new);
         GREATER_WARRIORS_BLESSING = SOLValheim.MOB_EFFECTS.register("greater_warriors_blessing", DietBlessingEffect::new);
-
-        // The supplied KubeJS files reference a primary Wayfarer's Blessing,
-        // but do not define any attributes for it. Keep it as a visible marker
-        // effect rather than inventing an unsupported bonus.
         WAYFARERS_BLESSING = SOLValheim.MOB_EFFECTS.register("wayfarers_blessing", DietBlessingEffect::new);
         GREATER_WAYFARERS_BLESSING = SOLValheim.MOB_EFFECTS.register("greater_wayfarers_blessing", DietBlessingEffect::new);
 
