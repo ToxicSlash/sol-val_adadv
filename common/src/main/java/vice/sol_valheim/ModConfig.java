@@ -5,7 +5,6 @@ import me.shedaniel.autoconfig.annotation.Config;
 import me.shedaniel.autoconfig.annotation.ConfigEntry;
 import me.shedaniel.autoconfig.serializer.PartitioningSerializer;
 import me.shedaniel.cloth.clothconfig.shadowed.blue.endless.jankson.Comment;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffect;
@@ -14,6 +13,12 @@ import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
+
+#if PRE_CURRENT_MC_1_19_2
+import net.minecraft.core.Registry;
+#elif POST_CURRENT_MC_1_20_1
+import net.minecraft.core.registries.BuiltInRegistries;
+#endif
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -89,11 +94,19 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
 
         if (registry.equals("minecraft:beetroot_soup")) {
             var effectConfig = new Common.MobEffectConfig();
-            effectConfig.ID = BuiltInRegistries.MOB_EFFECT.getKey(MobEffects.MOVEMENT_SPEED).toString();
+            effectConfig.ID = movementSpeedEffectId();
             generated.extraEffects.add(effectConfig);
         }
 
         return generated;
+    }
+
+    private static String movementSpeedEffectId() {
+        #if PRE_CURRENT_MC_1_19_2
+        return Registry.MOB_EFFECT.getKey(MobEffects.MOVEMENT_SPEED).toString();
+        #elif POST_CURRENT_MC_1_20_1
+        return BuiltInRegistries.MOB_EFFECT.getKey(MobEffects.MOVEMENT_SPEED).toString();
+        #endif
     }
 
     private static void applyFoodOverride(String registry, Common.FoodConfig config) {
@@ -174,6 +187,10 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         public boolean displayEffects = true;
 
         @ConfigEntry.Gui.TransitiveObject()
+        @Comment("Diet point timing and presentation. These are startup settings; food IDs live in config/sol_valheim/diets.json.")
+        public DietSystemConfig dietSystem = new DietSystemConfig();
+
+        @ConfigEntry.Gui.TransitiveObject()
         @Comment("Diet blessing attribute balance. Changes are intended to apply after a restart.")
         public DietBlessingConfig dietBlessings = new DietBlessingConfig();
 
@@ -188,6 +205,15 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
             - extraEffects: Extra effects provided by eating the food
         """)
         public Map<String, FoodConfig> foodConfigs = new HashMap<>();
+
+        public static final class DietSystemConfig implements ConfigData {
+            public int maxPoints = 20;
+            public int baseSecondsAtOnePoint = 60;
+            public int secondsPerPoint = 30;
+            public int bonusAtPoints = 8;
+            public boolean showParticles = true;
+            public boolean showActionbar = true;
+        }
 
         public static final class DietBlessingConfig implements ConfigData {
             public double buildersReach = 1.0;
@@ -272,7 +298,14 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
                 if (ID == null || ID.isBlank())
                     return null;
                 ResourceLocation id = ResourceLocation.tryParse(ID);
-                return id == null ? null : BuiltInRegistries.MOB_EFFECT.get(id);
+                if (id == null)
+                    return null;
+
+                #if PRE_CURRENT_MC_1_19_2
+                return Registry.MOB_EFFECT.get(id);
+                #elif POST_CURRENT_MC_1_20_1
+                return BuiltInRegistries.MOB_EFFECT.get(id);
+                #endif
             }
         }
     }
