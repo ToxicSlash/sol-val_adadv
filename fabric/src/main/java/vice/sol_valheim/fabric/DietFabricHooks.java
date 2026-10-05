@@ -34,12 +34,13 @@ public final class DietFabricHooks {
             for (var player : server.getPlayerList().getPlayers()) {
                 var data = ((DietDataAccessor) player).sol_valheim$getDietData();
                 DietSystem.onConfigReload(player, data);
+                DietSync.sendToPlayer(player);
             }
         });
 
-        // Fabric fires this both when a player joins and after a successful
-        // data-pack reload, making the server's diet mapping authoritative for
-        // client tooltips without requiring a client restart.
+        // This also covers first join. END_DATA_PACK_RELOAD explicitly resends
+        // after re-reading the external config so ordering cannot leave clients
+        // with the old tooltip map.
         ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register((player, joined) -> DietSync.sendToPlayer(player));
     }
 }
