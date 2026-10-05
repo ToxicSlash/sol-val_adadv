@@ -9,4 +9,9 @@ pluginManagement {
 
 include("common")
 include("fabric")
-include("forge")
+
+// Some upstream distributions include a Forge module, but this source archive
+// does not. Only include it when its project directory is actually present.
+if (file("forge").isDirectory()) {
+    include("forge")
+}
