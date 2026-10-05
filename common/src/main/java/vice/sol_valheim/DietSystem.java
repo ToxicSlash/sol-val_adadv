@@ -37,7 +37,11 @@ public final class DietSystem {
         if (player == null || stack == null || stack.isEmpty() || data == null)
             return;
 
-        String itemId = stack.getItem().arch$registryName().toString();
+        var registryName = stack.getItem().arch$registryName();
+        if (registryName == null)
+            return;
+
+        String itemId = registryName.toString();
         long gameTime = player.serverLevel().getGameTime();
         if (!data.markConsumption(gameTime, itemId))
             return;
@@ -114,10 +118,21 @@ public final class DietSystem {
         if (player == null || data == null)
             return;
 
+        // /reload changes the food-ID mapping, not the running player's diet
+        // clock. Preserve the remaining interval unless the startup max/decay
+        // values now require it to be clamped.
         for (DietCategory category : DietCategory.values()) {
             int points = Math.min(data.getPoints(category), DietConfig.maxPoints());
             data.setPoints(category, points);
-            data.setDecayTicks(category, points > 0 ? nextDecayTicks(points) : 0);
+            if (points <= 0) {
+                data.setDecayTicks(category, 0);
+                continue;
+            }
+
+            int maximumInterval = nextDecayTicks(points);
+            int remaining = data.getDecayTicks(category);
+            if (remaining <= 0 || remaining > maximumInterval)
+                data.setDecayTicks(category, maximumInterval);
         }
         refreshAllEffects(player, data);
         syncLegacyScoreboards(player, data);
