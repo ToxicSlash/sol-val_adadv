@@ -25,6 +25,11 @@ sourceSets {
     }
 }
 
+// Capture project properties before entering Loom's nested run closures. Those
+// closures delegate property lookups to run configs, which can shadow Gradle's
+// rootProject/property resolution.
+def dataGenModId = rootProject.modid
+
 loom {
     Project common = project(":common")
 
@@ -35,7 +40,7 @@ loom {
             name "Minecraft Data"
             vmArg "-Dfabric-api.datagen"
             vmArg "-Dfabric-api.datagen.output-dir=${common.file("src/generated/resources")}"
-            vmArg "-Dfabric-api.datagen.modid=${rootProject.modid}"
+            vmArg "-Dfabric-api.datagen.modid=${dataGenModId}"
             vmArg "-Dporting_lib.datagen.existing_resources=${common.file("src/main/resources")}"
 
             environmentVariable("DATAGEN", "TRUE")
