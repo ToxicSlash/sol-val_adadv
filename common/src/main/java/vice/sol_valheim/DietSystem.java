@@ -4,10 +4,20 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.ItemStack;
+
+#if PRE_CURRENT_MC_1_19_2
+import net.minecraft.core.Registry;
+#elif POST_CURRENT_MC_1_20_1
+import net.minecraft.core.registries.BuiltInRegistries;
+#endif
+
+import java.util.UUID;
 
 public final class DietSystem {
     public static final String LEGACY_TIMER_OBJECTIVE = "cmobs.diet.Timer";
@@ -138,6 +148,7 @@ public final class DietSystem {
         for (DietCategory category : DietCategory.values()) {
             player.removeEffect(DietEffects.primary(category));
             player.removeEffect(DietEffects.bonus(category));
+            refreshAttributes(player, category, 0);
         }
     }
 
@@ -153,6 +164,7 @@ public final class DietSystem {
         if (points <= 0) {
             player.removeEffect(primary);
             player.removeEffect(bonus);
+            refreshAttributes(player, category, 0);
             return;
         }
 
@@ -171,6 +183,74 @@ public final class DietSystem {
         } else {
             player.removeEffect(bonus);
         }
+
+        refreshAttributes(player, category, points);
+    }
+
+    private static void refreshAttributes(ServerPlayer player, DietCategory category, int points) {
+        int primaryScale = points <= 0 ? 0 : (points >= DietConfig.bonusAtPoints() ? 2 : 1);
+        boolean greater = points >= DietConfig.bonusAtPoints();
+
+        switch (category) {
+            case COMBAT -> {
+                setAttribute(player, "minecraft:generic.attack_damage", "cb515903-6df7-4367-88f2-2b9e49bf78af", 3.0 * primaryScale);
+                setAttribute(player, "minecraft:generic.attack_speed", "9ee97a37-9f0c-46db-8c9d-ea64b7fa4f7a", 0.05 * primaryScale);
+                setAttribute(player, "zenith_attributes:healing_received", "b5ac0264-ef05-4425-8767-25e8e9851721", greater ? 0.5 : 0.0);
+                setAttribute(player, "obscure_api:critical_hit", "8c2d890f-ffdb-40de-9a24-8840b4a58377", greater ? 0.05 : 0.0);
+            }
+            case BUILDING -> {
+                setAttribute(player, "reach-entity-attributes:reach", "727937d9-7779-44c9-ae1d-3c38614b0575", 1.0 * primaryScale);
+                setAttribute(player, "doublejumpattribute:doublejumpattribute", "e0d58ef2-5ecd-4c44-a41c-11635047eec1", greater ? 1.0 : 0.0);
+                setAttribute(player, "bettertrims:item_magnet", "de12a250-c5fb-4cf2-9425-2bb82b30974a", greater ? 1.0 : 0.0);
+            }
+            case MINING -> {
+                setAttribute(player, "zenith_attributes:mining_speed", "de07647d-4faa-4a95-b5f1-b1362712fb76", 0.05 * primaryScale);
+                setAttribute(player, "bettertrims:fortune", "a2d9987e-1dd3-43be-8168-d1fede7b224d", greater ? 2.0 : 0.0);
+                setAttribute(player, "bettertrims:miners_rush", "1de98e54-2dd1-445c-8f72-33b278d9075b", greater ? 1.0 : 0.0);
+            }
+            case ADVENTURING -> {
+                // No primary Wayfarer attributes were present in the supplied source.
+                setAttribute(player, "zenith_attributes:dodge_chance", "c8e26a84-8132-42fb-b53f-421c43359b0e", greater ? 0.1 : 0.0);
+                setAttribute(player, "bettertrims:swim_speed", "e2e5dd84-1aba-4602-a30e-cf690dbef433", greater ? 0.25 : 0.0);
+            }
+        }
+    }
+
+    private static void setAttribute(ServerPlayer player, String attributeId, String uuidString, double amount) {
+        ResourceLocation id = new ResourceLocation(attributeId);
+        UUID uuid = UUID.fromString(uuidString);
+
+        #if PRE_CURRENT_MC_1_19_2
+        var optional = Registry.ATTRIBUTE.getOptional(id);
+        #elif POST_CURRENT_MC_1_20_1
+        var optional = BuiltInRegistries.ATTRIBUTE.getOptional(id);
+        #endif
+
+        optional.ifPresent(attribute -> {
+            var instance = player.getAttribute(attribute);
+            if (instance == null)
+                return;
+
+            var existing = instance.getModifier(uuid);
+            if (Math.abs(amount) < 0.0000001) {
+                if (existing != null)
+                    instance.removeModifier(uuid);
+                return;
+            }
+
+            if (existing != null && Math.abs(existing.getAmount() - amount) < 0.0000001)
+                return;
+
+            if (existing != null)
+                instance.removeModifier(uuid);
+
+            instance.addTransientModifier(new AttributeModifier(
+                    uuid,
+                    "sol_valheim_diet_" + attributeId.replace(':', '_'),
+                    amount,
+                    AttributeModifier.Operation.ADDITION
+            ));
+        });
     }
 
     private static void showPlus(ServerPlayer player, DietCategory category, int added, int total) {
