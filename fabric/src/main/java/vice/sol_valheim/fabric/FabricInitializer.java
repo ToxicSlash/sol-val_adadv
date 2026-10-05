@@ -7,6 +7,7 @@ public class FabricInitializer implements ModInitializer {
     @Override
     public void onInitialize() {
         SOLValheim.init((stack) -> stack.getItem().getFoodProperties());
+        DietFabricHooks.init();
         MultiplayerCompatGuard.initServer();
     }
 }
