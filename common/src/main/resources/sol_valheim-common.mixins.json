@@ -6,7 +6,6 @@
   "mixins": [
     "CakeBlockMixin",
     "DietPlayerMixin",
-    "DietServerPlayerUseMixin",
     "ItemMixin",
     "LivingEntityDamageAccessor",
     "LivingEntityUseMixin",
