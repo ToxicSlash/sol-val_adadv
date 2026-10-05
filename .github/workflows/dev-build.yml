@@ -5,6 +5,10 @@ on:
     branches: [ dev ]
   workflow_dispatch:
 
+concurrency:
+  group: dev-fabric-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
