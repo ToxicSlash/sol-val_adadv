@@ -5,6 +5,8 @@
   "compatibilityLevel": "JAVA_17",
   "mixins": [
     "CakeBlockMixin",
+    "DietPlayerMixin",
+    "DietServerPlayerUseMixin",
     "ItemMixin",
     "LivingEntityDamageAccessor",
     "LivingEntityUseMixin",
