@@ -35,7 +35,7 @@ loom {
             name "Minecraft Data"
             vmArg "-Dfabric-api.datagen"
             vmArg "-Dfabric-api.datagen.output-dir=${common.file("src/generated/resources")}"
-            vmArg "-Dfabric-api.datagen.modid=logic_n_control"
+            vmArg "-Dfabric-api.datagen.modid=${rootProject.modid}"
             vmArg "-Dporting_lib.datagen.existing_resources=${common.file("src/main/resources")}"
 
             environmentVariable("DATAGEN", "TRUE")
@@ -137,8 +137,6 @@ publishing {
             from components.java
         }
     }
-
-    // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
     repositories {
         // Add repositories to publish to here.
     }
