@@ -31,9 +31,12 @@ subprojects {
     apply plugin: "dev.architectury.loom"
     apply plugin: "io.github.juuxel.loom-vineflower"
 
-    def isForge = it == project(":forge")
-    def isFabric = it == project(":fabric")
-    def isCommon = it == project(":common")
+    // Compare names instead of resolving :forge. The uploaded source does not
+    // contain a Forge project, and resolving a missing optional project here
+    // would fail Gradle configuration before the Fabric build can start.
+    def isForge = it.name == "forge"
+    def isFabric = it.name == "fabric"
+    def isCommon = it.name == "common"
 
     def awFile = project(":common").file("src/main/resources/${modid}.accesswidener")
 
@@ -47,7 +50,6 @@ subprojects {
                 forge {
                     convertAccessWideners = true
                     extraAccessWideners.add loom.accessWidenerPath.get().asFile.name
-
                 }
             }
         }
@@ -134,7 +136,7 @@ subprojects {
     processResources {
         def properties = [
                 id               : modid,
-                aw	 			 : access_widener,
+                aw               : access_widener,
                 version          : mod_version,
                 minecraft_version: minecraft_version,
                 display_name     : display_name,
@@ -189,11 +191,6 @@ static def getBuildNumber() {
     return (buildNumber != null ? "-${buildNumber}" : "")
 }
 
-
-/* Cursed stuff is defined below! Beware of dog */
-
-
-
 // Defines the preprocessors
 def setupManifoldProcessors(List<String> mcVers, int mcIndex) {
     def redefineList = new ArrayList<String>()
@@ -233,7 +230,7 @@ def loadProperties() {
     def mcVers = mc_versions.split(", ")
     int mcIndex = -1
 
-    println "Avalible Minecraft Versions: ${mc_versions}"
+    println "Available Minecraft Versions: ${mc_versions}"
 
     if (project.hasProperty("mcVer")) {
         mcVersion = mcVer
@@ -291,17 +288,16 @@ def makeAccessWidener() {
 // Defines the mixins
 def defineMixins() {
     def mixins = new ArrayList<String>()
-    def projects = new ArrayList<String>()
 
     for (Project proj : rootProject.subprojects) {
-        projects.add(proj.name)
-    }
+        File resourcesDir = proj.file("src/main/resources/")
+        File[] resourceFiles = resourcesDir.listFiles()
+        if (resourceFiles == null)
+            continue
 
-    for (String proj : projects) {
-        for (File file : project(proj).file("src/main/resources/").listFiles()) {
-            if (file.getName().endsWith("mixin.json") || file.getName().endsWith("mixins.json")) {
+        for (File file : resourceFiles) {
+            if (file.getName().endsWith("mixin.json") || file.getName().endsWith("mixins.json"))
                 mixins.add(file.getName())
-            }
         }
     }
 
