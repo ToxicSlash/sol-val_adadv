@@ -3,6 +3,7 @@ package vice.sol_valheim;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import dev.architectury.platform.Platform;
+import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,8 +34,7 @@ public final class DietConfig {
         try {
             ensureConfigExists();
             String json = Files.readString(CONFIG_PATH, StandardCharsets.UTF_8);
-            Data parsed = GSON.fromJson(json, Data.class);
-            install(parsed);
+            install(GSON.fromJson(json, Data.class));
             LOGGER.info("Loaded {} diet food entries from {}", foods.size(), CONFIG_PATH);
             return true;
         } catch (Exception ex) {
@@ -62,27 +62,28 @@ public final class DietConfig {
     }
 
     public static int maxPoints() {
-        return data.maxPoints;
+        var config = SOLValheim.Config.common.dietSystem;
+        return Math.max(1, config.maxPoints);
     }
 
     public static int baseSecondsAtOnePoint() {
-        return data.baseSecondsAtOnePoint;
+        return Math.max(1, SOLValheim.Config.common.dietSystem.baseSecondsAtOnePoint);
     }
 
     public static int secondsPerPoint() {
-        return data.secondsPerPoint;
+        return Math.max(1, SOLValheim.Config.common.dietSystem.secondsPerPoint);
     }
 
     public static int bonusAtPoints() {
-        return data.bonusAtPoints;
+        return Math.max(1, Math.min(maxPoints(), SOLValheim.Config.common.dietSystem.bonusAtPoints));
     }
 
     public static boolean showParticles() {
-        return data.showParticles;
+        return SOLValheim.Config.common.dietSystem.showParticles;
     }
 
     public static boolean showActionbar() {
-        return data.showActionbar;
+        return SOLValheim.Config.common.dietSystem.showActionbar;
     }
 
     public static Path path() {
@@ -104,11 +105,6 @@ public final class DietConfig {
     private static void install(Data parsed) {
         if (parsed == null)
             throw new IllegalArgumentException("Diet config root cannot be null");
-
-        parsed.maxPoints = Math.max(1, parsed.maxPoints);
-        parsed.baseSecondsAtOnePoint = Math.max(1, parsed.baseSecondsAtOnePoint);
-        parsed.secondsPerPoint = Math.max(1, parsed.secondsPerPoint);
-        parsed.bonusAtPoints = Math.max(1, Math.min(parsed.maxPoints, parsed.bonusAtPoints));
         if (parsed.foods == null)
             parsed.foods = new ArrayList<>();
 
@@ -117,15 +113,23 @@ public final class DietConfig {
             if (entry == null || entry.id == null || entry.id.isBlank())
                 continue;
 
-            DietCategory category = DietCategory.fromId(entry.diet);
-            if (category == null) {
-                LOGGER.warn("Ignoring diet entry {} because '{}' is not a valid diet", entry.id, entry.diet);
+            ResourceLocation itemId = ResourceLocation.tryParse(entry.id.trim());
+            if (itemId == null) {
+                LOGGER.warn("Ignoring invalid diet item id '{}'", entry.id);
                 continue;
             }
 
+            DietCategory category = DietCategory.fromId(entry.diet);
+            if (category == null) {
+                LOGGER.warn("Ignoring diet entry {} because '{}' is not a valid diet", itemId, entry.diet);
+                continue;
+            }
+
+            entry.id = itemId.toString();
             entry.diet = category.id;
-            entry.points = Math.max(1, entry.points);
-            next.put(entry.id, entry);
+            entry.points = Math.max(1, Math.min(maxPoints(), entry.points));
+            if (next.put(entry.id, entry) != null)
+                LOGGER.warn("Duplicate diet food entry for {}; the last entry wins", entry.id);
         }
 
         data = parsed;
@@ -133,12 +137,6 @@ public final class DietConfig {
     }
 
     public static final class Data {
-        public int maxPoints = 20;
-        public int baseSecondsAtOnePoint = 60;
-        public int secondsPerPoint = 30;
-        public int bonusAtPoints = 8;
-        public boolean showParticles = true;
-        public boolean showActionbar = true;
         public List<FoodEntry> foods = new ArrayList<>();
     }
 
