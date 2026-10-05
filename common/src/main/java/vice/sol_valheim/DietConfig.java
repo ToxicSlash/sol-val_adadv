@@ -12,7 +12,6 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -98,7 +97,15 @@ public final class DietConfig {
         try (InputStream in = DietConfig.class.getResourceAsStream("/sol_valheim/default_diets.json")) {
             if (in == null)
                 throw new IOException("Bundled default_diets.json is missing");
-            Files.copy(in, CONFIG_PATH, StandardCopyOption.REPLACE_EXISTING);
+
+            // The bundled file may contain legacy tuning keys for upgrade
+            // compatibility. Deserialize into the current schema before writing
+            // the user's config so a fresh diets.json contains only the food map.
+            String bundledJson = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            Data defaults = GSON.fromJson(bundledJson, Data.class);
+            if (defaults == null)
+                throw new IOException("Bundled default_diets.json is invalid");
+            Files.writeString(CONFIG_PATH, GSON.toJson(defaults), StandardCharsets.UTF_8);
         }
     }
 
