@@ -8,13 +8,14 @@ import net.minecraft.server.level.ServerPlayer;
 
 public final class DietSync {
     public static final ResourceLocation CHANNEL = new ResourceLocation(SOLValheim.MOD_ID, "diet_config");
+    private static final int MAX_CONFIG_BYTES = 1_048_576;
 
     private DietSync() {
     }
 
     public static void initClient() {
         NetworkManager.registerReceiver(NetworkManager.s2c(), CHANNEL, (buf, context) -> {
-            String json = buf.readUtf(32767);
+            String json = buf.readUtf(MAX_CONFIG_BYTES);
             context.queue(() -> DietConfig.applySynced(json));
         });
     }
@@ -24,8 +25,11 @@ public final class DietSync {
             return;
 
         String json = DietConfig.toJson();
+        if (json.length() > MAX_CONFIG_BYTES)
+            throw new IllegalStateException("Diet config is too large to synchronize: " + json.length() + " characters");
+
         var buf = new FriendlyByteBuf(Unpooled.buffer());
-        buf.writeUtf(json, 32767);
+        buf.writeUtf(json, MAX_CONFIG_BYTES);
         NetworkManager.sendToPlayer(player, CHANNEL, buf);
     }
 }
