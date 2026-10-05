@@ -8,6 +8,12 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
 
+#if PRE_CURRENT_MC_1_19_2
+import net.minecraft.core.Registry;
+#elif POST_CURRENT_MC_1_20_1
+import net.minecraft.core.registries.BuiltInRegistries;
+#endif
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -293,7 +299,12 @@ public class ValheimFoodData
         if (id == null)
             return null;
 
-        var item = SOLValheim.ITEMS.getRegistrar().get(id);
+        #if PRE_CURRENT_MC_1_19_2
+        var item = Registry.ITEM.get(id);
+        #elif POST_CURRENT_MC_1_20_1
+        var item = BuiltInRegistries.ITEM.get(id);
+        #endif
+
         if (item == null || item == Items.AIR)
             return null;
 
