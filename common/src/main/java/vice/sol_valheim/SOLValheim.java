@@ -52,10 +52,13 @@ public class SOLValheim
 	private static BiConsumer<ServerPlayer, ValheimFoodData> foodSyncSender = (player, data) -> {};
 
 	public static void init(FoodPropertiesGetter getter) {
+		DietEffects.register();
+
 		AutoConfig.register(ModConfig.class, PartitioningSerializer.wrap(JanksonConfigSerializer::new));
 		Config = AutoConfig.getConfigHolder(ModConfig.class).getConfig();
 
 		SOLValheim.getter = getter;
+		DietConfig.reload();
 		FoodSync.initServer();
 	}
 
@@ -71,13 +74,16 @@ public class SOLValheim
 	public static void addTooltip(ItemStack item, TooltipFlag flag, List<Component> list){
 		var food = item.getItem();
 		if (food == Items.ROTTEN_FLESH) {
-			list.add(Component.literal("☠ Empties Your Stomach!").withStyle(ChatFormatting.GREEN));
+			list.add(Component.literal("☠ Empties Your Stomach & Diet!").withStyle(ChatFormatting.GREEN));
 			return;
 		}
 
+		var dietEntry = DietConfig.get(food.arch$registryName().toString());
 		var config = ModConfig.getFoodConfig(item);
-		if (config == null)
+		if (config == null) {
+			addDietTooltip(dietEntry, list);
 			return;
+		}
 
 		var hearts = config.getHearts() % 2 == 0 ? config.getHearts() / 2 : String.format("%.1f", (float) config.getHearts() / 2f);
 		list.add(Component.literal("❤ " + hearts + " Heart" + (config.getHearts() / 2f > 1 ? "s" : "")).withStyle(ChatFormatting.RED));
@@ -106,9 +112,22 @@ public class SOLValheim
 			}
 		}
 
+		addDietTooltip(dietEntry, list);
+
 		if (item.getUseAnimation() == UseAnim.DRINK) {
 			list.add(Component.literal("❄ Refreshing!").withStyle(ChatFormatting.AQUA));
 
 		}
+	}
+
+	private static void addDietTooltip(DietConfig.FoodEntry dietEntry, List<Component> list) {
+		if (dietEntry == null)
+			return;
+
+		var category = dietEntry.category();
+		if (category == null)
+			return;
+
+		list.add(Component.literal("⟡ +" + dietEntry.points + " " + category.tooltipName).withStyle(ChatFormatting.GRAY));
 	}
 }
