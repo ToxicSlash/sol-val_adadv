@@ -33,7 +33,7 @@ public final class DietConfig {
         try {
             ensureConfigExists();
             String json = Files.readString(CONFIG_PATH, StandardCharsets.UTF_8);
-            install(GSON.fromJson(json, Data.class));
+            install(GSON.fromJson(json, Data.class), true);
             LOGGER.info("Loaded {} diet food entries from {}", foods.size(), CONFIG_PATH);
             return true;
         } catch (Exception ex) {
@@ -44,7 +44,9 @@ public final class DietConfig {
 
     public static synchronized boolean applySynced(String json) {
         try {
-            install(GSON.fromJson(json, Data.class));
+            // The server has already validated/clamped these point values. Do
+            // not re-clamp them using a potentially stale client startup config.
+            install(GSON.fromJson(json, Data.class), false);
             return true;
         } catch (Exception ex) {
             LOGGER.error("Failed to apply synchronized diet config", ex);
@@ -109,7 +111,7 @@ public final class DietConfig {
         }
     }
 
-    private static void install(Data parsed) {
+    private static void install(Data parsed, boolean clampPoints) {
         if (parsed == null)
             throw new IllegalArgumentException("Diet config root cannot be null");
         if (parsed.foods == null)
@@ -134,7 +136,9 @@ public final class DietConfig {
 
             entry.id = itemId.toString();
             entry.diet = category.id;
-            entry.points = Math.max(1, Math.min(maxPoints(), entry.points));
+            entry.points = clampPoints
+                    ? Math.max(1, Math.min(maxPoints(), entry.points))
+                    : Math.max(1, entry.points);
             if (next.put(entry.id, entry) != null)
                 LOGGER.warn("Duplicate diet food entry for {}; the last entry wins", entry.id);
         }
