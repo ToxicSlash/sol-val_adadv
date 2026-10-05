@@ -13,42 +13,29 @@ import java.util.function.BooleanSupplier;
 @Mixin(ServerLevel.class)
 public class ServerLevelMixin
 {
-    @Inject(at = @At("TAIL"), method = "tick")
-    public void tickPlayersFood(BooleanSupplier hasTimeLeft, CallbackInfo ci)
-    {
-        var level = (ServerLevel) (Object) this;
-        long gameTime = level.getGameTime();
-
-        for (var player : level.players()) {
-            ((PlayerEntityMixinDataAccessor) player).sol_valheim$serverTickFood(gameTime);
-        }
-    }
-
     @Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;setDayTime(J)V"), method = "tick")
-    public void onSleep(BooleanSupplier hasTimeLeft, CallbackInfo ci)
+    private void sol_valheim$advanceFoodDuringSleep(BooleanSupplier hasTimeLeft, CallbackInfo ci)
     {
         if (!SOLValheim.Config.common.passTicksDuringNight)
             return;
 
         var level = (ServerLevel) (Object) this;
-        var dayTime = level.getLevelData().getDayTime();
-
-        var l = dayTime + 24000L;
-        var newTime = l - l % 24000L;
-
-        var passedTicks = Math.max(0, newTime - dayTime);
+        long dayTime = level.getLevelData().getDayTime();
+        long nextDay = dayTime + 24000L;
+        long newTime = nextDay - nextDay % 24000L;
+        long passedTicks = Math.max(0, newTime - dayTime);
         if (passedTicks == 0)
             return;
 
         for (var player : level.players()) {
             var foodData = ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData();
-            if (foodData.DrinkSlot != null) {
-                foodData.DrinkSlot.ticksLeft = (int) Math.max(1200, foodData.DrinkSlot.ticksLeft - passedTicks);
-            }
-            for (var item : foodData.ItemEntries)
-            {
-                item.ticksLeft = (int) Math.max(1200, item.ticksLeft - passedTicks);
-            }
+            if (!foodData.hasActiveFood())
+                continue;
+
+            // Actually expire food during the skipped night instead of clamping
+            // every entry to one minute remaining.
+            foodData.advanceTicks(passedTicks);
+            SOLValheim.syncFoodData(player, foodData);
         }
     }
 }
