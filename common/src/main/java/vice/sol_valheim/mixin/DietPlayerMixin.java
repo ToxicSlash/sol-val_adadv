@@ -68,5 +68,10 @@ public class DietPlayerMixin implements DietDataAccessor {
             sol_valheim$dietData = DietData.read(tag.getCompound("sol_diet_data"));
         else
             sol_valheim$dietData = new DietData();
+
+        // Diet modifiers are transient by design, so persisted points must
+        // explicitly restore their effects/attributes on a new ServerPlayer.
+        if ((Object) this instanceof ServerPlayer serverPlayer)
+            DietSystem.onConfigReload(serverPlayer, sol_valheim$dietData);
     }
 }
