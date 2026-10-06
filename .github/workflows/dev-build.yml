@@ -3,6 +3,8 @@ name: Dev Fabric Build
 on:
   push:
     branches: [ dev ]
+    paths:
+      - '.github/build-trigger'
   workflow_dispatch:
 
 concurrency:
