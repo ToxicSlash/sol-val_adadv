@@ -44,7 +44,11 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         if (item != Items.CAKE && !item.isEdible() && !isDrink)
             return null;
 
-        String registry = item.arch$registryName().toString();
+        var registryName = item.arch$registryName();
+        if (registryName == null)
+            return null;
+
+        String registry = registryName.toString();
         var cached = RUNTIME_FOOD_CACHE.get(registry);
         if (cached != null)
             return cached;
@@ -54,6 +58,7 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         if (result == null)
             return null;
 
+        FoodBalanceRules.applyNamespaceRules(registry, result);
         applyFoodOverride(registry, result);
         RUNTIME_FOOD_CACHE.put(registry, result);
         return result;
@@ -127,6 +132,10 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
                 config.healthMultiplier = override.healthMultiplier;
             if (override.durationMultiplier >= 0f)
                 config.durationMultiplier = override.durationMultiplier;
+            if (override.reEatPercentage >= 0f)
+                config.reEatPercentage = override.reEatPercentage;
+            if (override.reEatMinimumSeconds >= 0)
+                config.reEatMinimumSeconds = override.reEatMinimumSeconds;
             return;
         }
     }
@@ -174,8 +183,14 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         @ConfigEntry.Gui.Tooltip() @Comment("Number of food slots (range 2-5, default 3)")
         public int maxSlots = 3;
 
-        @ConfigEntry.Gui.Tooltip() @Comment("Percentage remaining before the same food can be eaten again")
+        @ConfigEntry.Gui.Tooltip() @Comment("Percentage remaining before a food slot can be refreshed or replaced")
         public float eatAgainPercentage = 0.2F;
+
+        @ConfigEntry.Gui.Tooltip() @Comment("Minimum seconds remaining before a food slot can be refreshed or replaced. Per-food overrides may replace this value.")
+        public int reEatMinimumSeconds = 60;
+
+        @ConfigEntry.Gui.Tooltip() @Comment("Safety resync interval for stomach HUD data. State changes still sync immediately. Set to 0 to disable periodic correction.")
+        public int stomachSafetySyncSeconds = 10;
 
         @ConfigEntry.Gui.Tooltip() @Comment("Boost given to other foods when drinking")
         public float drinkSlotFoodEffectivenessBonus = 0.10F;
@@ -194,7 +209,10 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         @Comment("Diet blessing attribute balance. Changes are intended to apply after a restart.")
         public DietBlessingConfig dietBlessings = new DietBlessingConfig();
 
-        @Comment("Per-food overrides applied after automatically generated values. Use -1 to keep the generated value.")
+        @Comment("Namespace-wide generated food multipliers. Exact food overrides are applied afterwards.")
+        public List<NamespaceFoodRule> namespaceFoodRules = new ArrayList<>();
+
+        @Comment("Per-food overrides applied after automatically generated and namespace values. Use -1 to keep the generated value.")
         public List<FoodOverride> foodOverrides = new ArrayList<>();
 
         @ConfigEntry.Gui.Tooltip(count = 5) @Comment("""
@@ -211,6 +229,9 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
             public int baseSecondsAtOnePoint = 60;
             public int secondsPerPoint = 30;
             public int bonusAtPoints = 8;
+            public int postEatDecayDelaySeconds = 0;
+            public boolean resetCategoryDecayOnEat = true;
+            public boolean mirrorLegacyScoreboards = true;
             public boolean showParticles = true;
             public boolean showActionbar = true;
         }
@@ -236,6 +257,15 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
             public double greaterWayfarersSwimSpeed = 0.25;
         }
 
+        public static final class NamespaceFoodRule implements ConfigData {
+            public String namespace = "farmersdelight";
+            public float nutritionMultiplier = 1.0f;
+            public float saturationMultiplier = 1.0f;
+            public float healthRegenMultiplier = 1.0f;
+            public float healthMultiplier = 1.0f;
+            public float durationMultiplier = 1.0f;
+        }
+
         public static final class FoodOverride implements ConfigData {
             public String id = "minecraft:apple";
             public int nutrition = -1;
@@ -243,6 +273,8 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
             public float healthRegenModifier = -1f;
             public float healthMultiplier = -1f;
             public float durationMultiplier = -1f;
+            public float reEatPercentage = -1f;
+            public int reEatMinimumSeconds = -1;
         }
 
         public static final class FoodConfig implements ConfigData {
@@ -251,6 +283,8 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
             public float healthRegenModifier = 1f;
             public float healthMultiplier = 1f;
             public float durationMultiplier = 1f;
+            public float reEatPercentage = -1f;
+            public int reEatMinimumSeconds = -1;
             public List<MobEffectConfig> extraEffects = new ArrayList<>();
 
             public FoodConfig() {
@@ -262,6 +296,8 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
                 this.healthRegenModifier = other.healthRegenModifier;
                 this.healthMultiplier = other.healthMultiplier;
                 this.durationMultiplier = other.durationMultiplier;
+                this.reEatPercentage = other.reEatPercentage;
+                this.reEatMinimumSeconds = other.reEatMinimumSeconds;
                 this.extraEffects = new ArrayList<>(other.extraEffects);
             }
 
@@ -281,6 +317,21 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
 
             public float getHealthRegen() {
                 return Mth.clamp(nutrition * 0.10f * healthRegenModifier, 0.25f, 2f);
+            }
+
+            public float getReEatPercentage() {
+                float configured = reEatPercentage >= 0f ? reEatPercentage : SOLValheim.Config.common.eatAgainPercentage;
+                return Mth.clamp(configured, 0f, 1f);
+            }
+
+            public int getReEatMinimumTicks() {
+                int seconds = reEatMinimumSeconds >= 0 ? reEatMinimumSeconds : SOLValheim.Config.common.reEatMinimumSeconds;
+                return Math.max(0, seconds) * 20;
+            }
+
+            public int getReEatThresholdTicks() {
+                int byPercentage = Math.round(getTime() * getReEatPercentage());
+                return Math.max(getReEatMinimumTicks(), byPercentage);
             }
         }
 
@@ -335,5 +386,13 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         @ConfigEntry.Gui.Tooltip
         @Comment("Right-align the stomach HUD to the hunger-bar edge and grow slots leftward. Disable to grow slots to the right instead.")
         public boolean foodHudRightAligned = true;
+
+        @ConfigEntry.Gui.Tooltip
+        @Comment("Highlight foods that have entered their refresh/replacement window.")
+        public boolean foodHudShowReEatIndicator = true;
+
+        @ConfigEntry.Gui.Tooltip
+        @Comment("When holding a replacement food with a full stomach, highlight the slot that would be replaced.")
+        public boolean foodHudHighlightReplacement = true;
     }
 }
