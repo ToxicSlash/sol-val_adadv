@@ -11,6 +11,8 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.ItemStack;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 #if PRE_CURRENT_MC_1_19_2
 import net.minecraft.core.Registry;
@@ -27,6 +29,7 @@ import java.util.UUID;
 public final class DietSystem {
     public static final String LEGACY_TIMER_OBJECTIVE = "cmobs.diet.Timer";
 
+    private static final Logger LOGGER = LoggerFactory.getLogger("sol_valheim/diet");
     private static final Map<String, Attribute> ATTRIBUTE_CACHE = new HashMap<>();
     private static final Set<String> MISSING_ATTRIBUTES = new HashSet<>();
 
@@ -59,10 +62,16 @@ public final class DietSystem {
         if (category == null)
             return;
 
+        int before = data.getPoints(category);
         int added = Math.max(1, entry.points);
-        int next = Math.min(DietConfig.maxPoints(), data.getPoints(category) + added);
+        int next = Math.min(DietConfig.maxPoints(), before + added);
         data.setPoints(category, next);
-        data.setDecayTicks(category, nextDecayTicks(next));
+
+        var cfg = SOLValheim.Config.common.dietSystem;
+        int currentDecay = data.getDecayTicks(category);
+        if (before <= 0 || currentDecay <= 0 || cfg.resetCategoryDecayOnEat)
+            data.setDecayTicks(category, initialDecayTicks(next));
+
         data.resetGlobalTimer();
 
         refreshCategory(player, category, next);
@@ -105,9 +114,6 @@ public final class DietSystem {
         if (changed)
             syncLegacyScoreboards(player, data);
 
-        // Effects are intentionally short and refreshed once per second. Keep
-        // attribute work event-driven so optional-attribute lookup does not run
-        // every second for every connected player.
         if (player.tickCount % 20 == 0) {
             refreshEffectDurations(player, data);
             syncLegacyTimer(player, data);
@@ -118,9 +124,6 @@ public final class DietSystem {
         if (player == null || data == null)
             return;
 
-        // /reload changes the food-ID mapping, not the running player's diet
-        // clock. Preserve the remaining interval unless the startup max/decay
-        // values now require it to be clamped.
         for (DietCategory category : DietCategory.values()) {
             int points = Math.min(data.getPoints(category), DietConfig.maxPoints());
             data.setPoints(category, points);
@@ -129,7 +132,7 @@ public final class DietSystem {
                 continue;
             }
 
-            int maximumInterval = nextDecayTicks(points);
+            int maximumInterval = Math.max(nextDecayTicks(points), postEatDelayTicks());
             int remaining = data.getDecayTicks(category);
             if (remaining <= 0 || remaining > maximumInterval)
                 data.setDecayTicks(category, maximumInterval);
@@ -180,6 +183,16 @@ public final class DietSystem {
             player.removeEffect(DietEffects.bonus(category));
             refreshAttributes(player, category, 0);
         }
+    }
+
+    private static int initialDecayTicks(int points) {
+        int delay = postEatDelayTicks();
+        return delay > 0 ? delay : nextDecayTicks(points);
+    }
+
+    private static int postEatDelayTicks() {
+        var cfg = SOLValheim.Config.common.dietSystem;
+        return Math.max(0, cfg.postEatDecayDelaySeconds) * 20;
     }
 
     private static int nextDecayTicks(int points) {
@@ -298,6 +311,7 @@ public final class DietSystem {
         ResourceLocation id = ResourceLocation.tryParse(attributeId);
         if (id == null) {
             MISSING_ATTRIBUTES.add(attributeId);
+            LOGGER.warn("Diet blessing attribute id '{}' is invalid", attributeId);
             return null;
         }
 
@@ -309,6 +323,7 @@ public final class DietSystem {
 
         if (optional.isEmpty()) {
             MISSING_ATTRIBUTES.add(attributeId);
+            LOGGER.warn("Diet blessing attribute '{}' is unavailable; its bonus will be skipped", attributeId);
             return null;
         }
 
@@ -341,7 +356,17 @@ public final class DietSystem {
         );
     }
 
+    private static boolean mirrorLegacyScoreboards() {
+        return SOLValheim.Config != null
+                && SOLValheim.Config.common != null
+                && SOLValheim.Config.common.dietSystem != null
+                && SOLValheim.Config.common.dietSystem.mirrorLegacyScoreboards;
+    }
+
     private static void syncLegacyScoreboards(ServerPlayer player, DietData data) {
+        if (!mirrorLegacyScoreboards())
+            return;
+
         var scoreboard = player.getScoreboard();
         String holder = player.getScoreboardName();
 
@@ -355,6 +380,8 @@ public final class DietSystem {
     }
 
     private static void syncLegacyTimer(ServerPlayer player, DietData data) {
+        if (!mirrorLegacyScoreboards())
+            return;
         var objective = player.getScoreboard().getObjective(LEGACY_TIMER_OBJECTIVE);
         if (objective != null)
             player.getScoreboard().getOrCreatePlayerScore(player.getScoreboardName(), objective).setScore(data.getGlobalTimerTicks() / 20);
