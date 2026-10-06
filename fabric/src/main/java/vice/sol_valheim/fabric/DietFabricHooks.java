@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -94,14 +95,14 @@ public final class DietFabricHooks {
         player.sendSystemMessage(Component.literal("SOL Stomach " + data.ItemEntries.size() + "/" + data.MaxItemSlots).withStyle(ChatFormatting.GOLD));
         int index = 1;
         for (var entry : data.ItemEntries) {
-            var id = entry.item.getItem().arch$registryName();
+            var id = BuiltInRegistries.ITEM.getKey(entry.item.getItem());
             String state = entry.canEatEarly() ? "ready" : "locked";
             player.sendSystemMessage(Component.literal(index + ". " + id + " - " + formatTicks(entry.ticksLeft) + " [" + state + "]")
                     .withStyle(entry.canEatEarly() ? ChatFormatting.GREEN : ChatFormatting.WHITE));
             index++;
         }
         if (data.DrinkSlot != null) {
-            var id = data.DrinkSlot.item.getItem().arch$registryName();
+            var id = BuiltInRegistries.ITEM.getKey(data.DrinkSlot.item.getItem());
             player.sendSystemMessage(Component.literal("Drink: " + id + " - " + formatTicks(data.DrinkSlot.ticksLeft)
                     + " [" + (data.DrinkSlot.canEatEarly() ? "ready" : "locked") + "]").withStyle(ChatFormatting.AQUA));
         }
@@ -118,7 +119,7 @@ public final class DietFabricHooks {
             return 0;
         }
 
-        var id = stack.getItem().arch$registryName();
+        var id = BuiltInRegistries.ITEM.getKey(stack.getItem());
         String itemId = id == null ? "unknown" : id.toString();
         player.sendSystemMessage(Component.literal("SOL Food Info: " + itemId).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
         player.sendSystemMessage(Component.literal("Health: +" + formatHearts(config.getHearts()) + " hearts"));
