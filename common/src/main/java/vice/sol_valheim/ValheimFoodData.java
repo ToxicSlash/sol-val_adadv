@@ -20,6 +20,8 @@ import java.util.List;
 
 public class ValheimFoodData
 {
+    public static final int DATA_VERSION = 2;
+
     public static final EntityDataSerializer<ValheimFoodData> FOOD_DATA_SERIALIZER = new EntityDataSerializer<>(){
         @Override
         public void write(FriendlyByteBuf buffer, ValheimFoodData value)
@@ -83,9 +85,6 @@ public class ValheimFoodData
             if (!existing.canEatEarly())
                 return;
 
-            // Re-eating the same food refreshes that exact slot. The consume
-            // event still fires normally, so its configured diet points are
-            // awarded again without clearing the player's existing diet.
             existing.ticksLeft = config.getTime();
             existing.item = stored;
             sol_valheim$sortEntries();
@@ -98,12 +97,7 @@ public class ValheimFoodData
             return;
         }
 
-        // Once a full stomach contains a food that has entered its re-eat
-        // window, that slot becomes replaceable. Prefer the entry closest to
-        // expiring when several slots are eligible. This lets players rotate
-        // through different foods and build diet points by actively eating,
-        // while foods that are still outside their re-eat window stay locked.
-        var replaceable = sol_valheim$getReplaceableEntry();
+        var replaceable = findReplaceableEntry();
         if (replaceable == null)
             return;
 
@@ -132,7 +126,7 @@ public class ValheimFoodData
         if (existing != null)
             return existing.canEatEarly();
 
-        return ItemEntries.size() < MaxItemSlots || sol_valheim$getReplaceableEntry() != null;
+        return ItemEntries.size() < MaxItemSlots || findReplaceableEntry() != null;
     }
 
     public EatenFoodItem getEatenFood(ItemStack food) {
@@ -143,7 +137,7 @@ public class ValheimFoodData
         return null;
     }
 
-    private EatenFoodItem sol_valheim$getReplaceableEntry() {
+    public EatenFoodItem findReplaceableEntry() {
         EatenFoodItem best = null;
         for (var entry : ItemEntries) {
             if (!entry.canEatEarly())
@@ -164,43 +158,53 @@ public class ValheimFoodData
         DrinkSlot = null;
     }
 
-    public void tick()
+    /** Returns true only when the stomach structure changed (expiry/invalid entry). */
+    public boolean tick()
     {
-        advanceTicks(1);
+        return advanceTicks(1);
     }
 
-    public void advanceTicks(long ticks)
+    /** Returns true only when an entry was removed while advancing. */
+    public boolean advanceTicks(long ticks)
     {
         sol_valheim$sanitizeMaxSlots();
         if (ticks <= 0)
-            return;
+            return false;
 
+        boolean changed = false;
         var iterator = ItemEntries.iterator();
         while (iterator.hasNext()) {
             var item = iterator.next();
             if (!sol_valheim$isValidFoodEntry(item)) {
                 iterator.remove();
+                changed = true;
                 continue;
             }
 
             long left = (long) item.ticksLeft - ticks;
-            if (left <= 0)
+            if (left <= 0) {
                 iterator.remove();
-            else
+                changed = true;
+            } else {
                 item.ticksLeft = (int) Math.min(Integer.MAX_VALUE, left);
+            }
         }
 
         if (DrinkSlot != null) {
             if (!sol_valheim$isValidFoodEntry(DrinkSlot)) {
                 DrinkSlot = null;
+                changed = true;
             } else {
                 long left = (long) DrinkSlot.ticksLeft - ticks;
-                if (left <= 0)
+                if (left <= 0) {
                     DrinkSlot = null;
-                else
+                    changed = true;
+                } else {
                     DrinkSlot.ticksLeft = (int) Math.min(Integer.MAX_VALUE, left);
+                }
             }
         }
+        return changed;
     }
 
     public float getTotalFoodNutrition()
@@ -248,6 +252,7 @@ public class ValheimFoodData
     }
 
     public CompoundTag save(CompoundTag tag) {
+        tag.putInt("data_version", DATA_VERSION);
         int count = 0;
         tag.putInt("max_slots", MaxItemSlots);
         for (var item : ItemEntries)
@@ -285,6 +290,9 @@ public class ValheimFoodData
         if (tag == null)
             return instance;
 
+        // Version 0/1 data uses the same food/tick fields. Reading it through
+        // this path transparently migrates it when the player is next saved.
+        int version = tag.getInt("data_version");
         instance.MaxItemSlots = sol_valheim$configuredMaxSlots();
         int size = Math.max(0, Math.min(16, tag.getInt("count")));
         for (int count = 0; count < size; count++)
@@ -365,15 +373,15 @@ public class ValheimFoodData
         public int ticksLeft;
 
         public boolean canEatEarly() {
-            if (ticksLeft <= 1200)
-                return true;
-
             var config = ModConfig.getFoodConfig(item);
             if (config == null)
                 return false;
+            return ticksLeft <= config.getReEatThresholdTicks();
+        }
 
-            float threshold = Math.max(0f, Math.min(1f, SOLValheim.Config.common.eatAgainPercentage));
-            return ((float) ticksLeft / config.getTime()) <= threshold;
+        public int getReEatThresholdTicks() {
+            var config = ModConfig.getFoodConfig(item);
+            return config == null ? 0 : config.getReEatThresholdTicks();
         }
 
         public EatenFoodItem(ItemStack item, int ticksLeft)
