@@ -315,5 +315,25 @@ public class ModConfig extends PartitioningSerializer.GlobalData {
         @ConfigEntry.Gui.Tooltip
         @Comment("Enlarge the currently eaten food icons")
         public boolean useLargeIcons = true;
+
+        @ConfigEntry.Gui.Tooltip
+        @Comment("Overall stomach HUD scale. 1.0 is the default size. Values are clamped to 0.25-3.0 while rendering.")
+        public float foodHudScale = 1.0f;
+
+        @ConfigEntry.Gui.Tooltip
+        @Comment("Horizontal pixel offset from the vanilla hunger-bar anchor. Positive values move the stomach HUD right.")
+        public int foodHudXOffset = 0;
+
+        @ConfigEntry.Gui.Tooltip
+        @Comment("Vertical pixel offset from the vanilla hunger-bar anchor. Positive values move the stomach HUD down.")
+        public int foodHudYOffset = 0;
+
+        @ConfigEntry.Gui.Tooltip
+        @Comment("Pixel spacing between stomach slots before HUD scaling is applied.")
+        public int foodHudSpacing = 1;
+
+        @ConfigEntry.Gui.Tooltip
+        @Comment("Right-align the stomach HUD to the hunger-bar edge and grow slots leftward. Disable to grow slots to the right instead.")
+        public boolean foodHudRightAligned = true;
     }
 }
