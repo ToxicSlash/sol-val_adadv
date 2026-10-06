@@ -7,6 +7,12 @@ import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+#if PRE_CURRENT_MC_1_19_2
+import net.minecraft.core.Registry;
+#elif POST_CURRENT_MC_1_20_1
+import net.minecraft.core.registries.BuiltInRegistries;
+#endif
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -100,9 +106,6 @@ public final class DietConfig {
             if (in == null)
                 throw new IOException("Bundled default_diets.json is missing");
 
-            // The bundled file may contain legacy tuning keys for upgrade
-            // compatibility. Deserialize into the current schema before writing
-            // the user's config so a fresh diets.json contains only the food map.
             String bundledJson = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             Data defaults = GSON.fromJson(bundledJson, Data.class);
             if (defaults == null)
@@ -128,11 +131,17 @@ public final class DietConfig {
                 continue;
             }
 
+            if (clampPoints && !itemExists(itemId))
+                LOGGER.warn("Diet mapping references missing item '{}'", itemId);
+
             DietCategory category = DietCategory.fromId(entry.diet);
             if (category == null) {
                 LOGGER.warn("Ignoring diet entry {} because '{}' is not a valid diet", itemId, entry.diet);
                 continue;
             }
+
+            if (clampPoints && entry.points < 1)
+                LOGGER.warn("Diet mapping {} has {} points; it will be clamped to at least 1", itemId, entry.points);
 
             entry.id = itemId.toString();
             entry.diet = category.id;
@@ -145,6 +154,14 @@ public final class DietConfig {
 
         data = parsed;
         foods = Collections.unmodifiableMap(next);
+    }
+
+    private static boolean itemExists(ResourceLocation id) {
+        #if PRE_CURRENT_MC_1_19_2
+        return Registry.ITEM.containsKey(id);
+        #elif POST_CURRENT_MC_1_20_1
+        return BuiltInRegistries.ITEM.containsKey(id);
+        #endif
     }
 
     public static final class Data {
