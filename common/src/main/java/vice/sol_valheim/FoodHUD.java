@@ -27,7 +27,6 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
@@ -60,15 +59,13 @@ public class FoodHUD implements ClientGuiEvent.RenderHud
             float hudScale = Math.max(0.25f, Math.min(3.0f, hudConfig.foodHudScale));
             int spacing = Math.max(0, Math.min(32, hudConfig.foodHudSpacing));
 
-            // Match vanilla's hunger-bar anchor by default: right side of the
-            // hotbar at the same vertical level. Offsets are applied in GUI
-            // pixels before the stomach HUD scale is applied.
             int anchorX = client.getWindow().getGuiScaledWidth() / 2 + 91 + hudConfig.foodHudXOffset;
             int anchorY = client.getWindow().getGuiScaledHeight() - 39 + hudConfig.foodHudYOffset;
 
             pose.translate(anchorX, anchorY, 0f);
             pose.scale(hudScale, hudScale, 1f);
 
+            ValheimFoodData.EatenFoodItem replacementTarget = findReplacementTarget(foodData);
             int offset = 1;
             int size = useLargeIcons ? 14 : 9;
             int localHeight = useLargeIcons ? -6 : 0;
@@ -77,15 +74,44 @@ public class FoodHUD implements ClientGuiEvent.RenderHud
                 if (ModConfig.getFoodConfig(food.item) == null)
                     continue;
 
-                renderFoodSlot(graphics, food, size, offset, localHeight, useLargeIcons, hudConfig.foodHudRightAligned, spacing);
+                renderFoodSlot(graphics, food, size, offset, localHeight, useLargeIcons,
+                        hudConfig.foodHudRightAligned, spacing,
+                        hudConfig.foodHudShowReEatIndicator && food.canEatEarly(),
+                        hudConfig.foodHudHighlightReplacement && food == replacementTarget);
                 offset++;
             }
 
             if (foodData.DrinkSlot != null)
-                renderFoodSlot(graphics, foodData.DrinkSlot, size, offset, localHeight, useLargeIcons, hudConfig.foodHudRightAligned, spacing);
+                renderFoodSlot(graphics, foodData.DrinkSlot, size, offset, localHeight, useLargeIcons,
+                        hudConfig.foodHudRightAligned, spacing,
+                        hudConfig.foodHudShowReEatIndicator && foodData.DrinkSlot.canEatEarly(),
+                        hudConfig.foodHudHighlightReplacement && foodData.DrinkSlot == replacementTarget);
         } finally {
             pose.popPose();
         }
+    }
+
+    private static ValheimFoodData.EatenFoodItem findReplacementTarget(ValheimFoodData foodData) {
+        if (client.player == null)
+            return null;
+
+        ItemStack held = client.player.getMainHandItem();
+        if (ModConfig.getFoodConfig(held) == null)
+            held = client.player.getOffhandItem();
+        if (held.isEmpty() || held.is(Items.ROTTEN_FLESH) || ModConfig.getFoodConfig(held) == null)
+            return null;
+
+        if (held.getUseAnimation() == UseAnim.DRINK) {
+            if (foodData.DrinkSlot != null
+                    && !ItemStack.isSameItemSameTags(foodData.DrinkSlot.item, held)
+                    && foodData.DrinkSlot.canEatEarly())
+                return foodData.DrinkSlot;
+            return null;
+        }
+
+        if (foodData.getEatenFood(held) != null || foodData.ItemEntries.size() < foodData.MaxItemSlots)
+            return null;
+        return foodData.findReplaceableEntry();
     }
 
     private static void renderFoodSlot(#if PRE_CURRENT_MC_1_19_2 PoseStack #elif POST_CURRENT_MC_1_20_1 GuiGraphics #endif graphics,
@@ -95,7 +121,9 @@ public class FoodHUD implements ClientGuiEvent.RenderHud
                                        int height,
                                        boolean useLargeIcons,
                                        boolean rightAligned,
-                                       int spacing)
+                                       int spacing,
+                                       boolean readyToRefresh,
+                                       boolean replacementTarget)
     {
         var foodConfig = ModConfig.getFoodConfig(food.item);
         if (foodConfig == null)
@@ -112,25 +140,27 @@ public class FoodHUD implements ClientGuiEvent.RenderHud
 
         float ticksLeftPercent = Float.min(1.0F, (float) food.ticksLeft / foodConfig.getTime());
         int barHeight = Integer.max(1, (int)((size + 2f) * ticksLeftPercent));
-        int barColor = ticksLeftPercent < 0.2 ?
-                FastColor.ARGB32.color(180, 255, 10, 10) :
-                FastColor.ARGB32.color(96, 0, 0, 0);
+        int barColor = readyToRefresh
+                ? FastColor.ARGB32.color(150, 255, 170, 0)
+                : FastColor.ARGB32.color(96, 0, 0, 0);
 
         int wholeSeconds = Math.max(0, food.ticksLeft / 20);
         var scale = useLargeIcons ? 0.75f : 0.5f;
         boolean isSeconds = wholeSeconds < 60;
         String timeText;
-        if (isSeconds)
-        {
+        if (isSeconds) {
             timeText = wholeSeconds + "s";
-        }
-        else
-        {
-            int roundedMinutes = Math.max(1, Math.round((float) food.ticksLeft / (20 * 60)));
-            timeText = roundedMinutes + "m";
+        } else {
+            int wholeMinutes = Math.max(1, wholeSeconds / 60);
+            timeText = wholeMinutes + "m";
         }
 
         var pose = #if PRE_CURRENT_MC_1_19_2 graphics #elif POST_CURRENT_MC_1_20_1 graphics.pose(); #endif;
+
+        if (replacementTarget)
+            drawBorder(graphics, startWidth - 1, height - 1, size + 2, FastColor.ARGB32.color(255, 255, 145, 0));
+        else if (readyToRefresh)
+            drawBorder(graphics, startWidth - 1, height - 1, size + 2, FastColor.ARGB32.color(255, 70, 220, 90));
 
         fill(graphics, startWidth, height, startWidth + size, height + size, bgColor);
         fill(graphics, startWidth, Integer.max(height, height - barHeight + size), startWidth + size, height + size, barColor);
@@ -152,12 +182,23 @@ public class FoodHUD implements ClientGuiEvent.RenderHud
         pose.pushPose();
         pose.translate(0.0f, 0.0f, 200.0f);
 
-        drawFont(graphics, timeText, startWidth + (timeText.length() > 1 ? 6 : 12), height + 10, isSeconds ? FastColor.ARGB32.color(255, 237, 57, 57) : FastColor.ARGB32.color(255, 255, 255, 255));
+        int timeColor = readyToRefresh
+                ? FastColor.ARGB32.color(255, 255, 205, 64)
+                : (isSeconds ? FastColor.ARGB32.color(255, 237, 57, 57) : FastColor.ARGB32.color(255, 255, 255, 255));
+        drawFont(graphics, timeText, startWidth + (timeText.length() > 1 ? 6 : 12), height + 10, timeColor);
         if (!foodConfig.extraEffects.isEmpty())
             drawFont(graphics, "+" + foodConfig.extraEffects.size(), startWidth + 6, height, yellow);
 
         pose.popPose();
         pose.popPose();
+    }
+
+    private static void drawBorder(#if PRE_CURRENT_MC_1_19_2 PoseStack #elif POST_CURRENT_MC_1_20_1 GuiGraphics #endif graphics,
+                                   int x, int y, int size, int color) {
+        fill(graphics, x, y, x + size, y + 1, color);
+        fill(graphics, x, y + size - 1, x + size, y + size, color);
+        fill(graphics, x, y, x + 1, y + size, color);
+        fill(graphics, x + size - 1, y, x + size, y + size, color);
     }
 
     private static void fill(#if PRE_CURRENT_MC_1_19_2 PoseStack #elif POST_CURRENT_MC_1_20_1 GuiGraphics #endif graphics, int width, int height, int x, int y, int color)
