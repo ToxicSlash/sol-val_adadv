@@ -5,6 +5,8 @@ import net.minecraft.nbt.CompoundTag;
 import java.util.EnumMap;
 
 public final class DietData {
+    public static final int DATA_VERSION = 2;
+
     private final EnumMap<DietCategory, Integer> points = new EnumMap<>(DietCategory.class);
     private final EnumMap<DietCategory, Integer> decayTicks = new EnumMap<>(DietCategory.class);
     private int globalTimerTicks;
@@ -66,6 +68,7 @@ public final class DietData {
     }
 
     public CompoundTag save(CompoundTag tag) {
+        tag.putInt("data_version", DATA_VERSION);
         for (DietCategory category : DietCategory.values()) {
             tag.putInt(category.id + "_points", getPoints(category));
             tag.putInt(category.id + "_decay", getDecayTicks(category));
@@ -76,6 +79,9 @@ public final class DietData {
 
     public static DietData read(CompoundTag tag) {
         DietData data = new DietData();
+        // Versions 0/1 use the same point/timer keys and are migrated simply by
+        // reading them here and writing DATA_VERSION on the next player save.
+        int version = tag.getInt("data_version");
         for (DietCategory category : DietCategory.values()) {
             data.setPoints(category, tag.getInt(category.id + "_points"));
             data.setDecayTicks(category, tag.getInt(category.id + "_decay"));
