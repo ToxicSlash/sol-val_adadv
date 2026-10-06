@@ -12,10 +12,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import vice.sol_valheim.DietSystem;
-import vice.sol_valheim.SOLValheim;
-import vice.sol_valheim.accessors.DietDataAccessor;
-import vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor;
+import vice.sol_valheim.ConsumptionSystem;
 
 @Mixin(CakeBlock.class)
 public class CakeBlockMixin
@@ -23,8 +20,7 @@ public class CakeBlockMixin
     @Inject(at = @At("HEAD"), method = "eat(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/InteractionResult;", cancellable = true)
     private static void sol_valheim$canEatCake(LevelAccessor level, BlockPos pos, BlockState state, Player player, CallbackInfoReturnable<InteractionResult> cir)
     {
-        var foodData = ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData();
-        if (!foodData.canEat(Items.CAKE.getDefaultInstance())) {
+        if (!ConsumptionSystem.canConsume(player, Items.CAKE.getDefaultInstance())) {
             cir.setReturnValue(InteractionResult.FAIL);
             cir.cancel();
         }
@@ -36,13 +32,7 @@ public class CakeBlockMixin
         if (level.isClientSide() || cir.getReturnValue() == null || !cir.getReturnValue().consumesAction())
             return;
 
-        var cake = Items.CAKE.getDefaultInstance();
-        var foodData = ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData();
-        foodData.eatItem(cake);
-
-        if (player instanceof ServerPlayer serverPlayer) {
-            SOLValheim.syncFoodData(serverPlayer, foodData);
-            DietSystem.onConsumed(serverPlayer, cake, ((DietDataAccessor) player).sol_valheim$getDietData());
-        }
+        if (player instanceof ServerPlayer serverPlayer)
+            ConsumptionSystem.commit(serverPlayer, Items.CAKE.getDefaultInstance());
     }
 }
