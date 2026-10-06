@@ -57,9 +57,11 @@ public class SOLValheim
         AutoConfig.register(ModConfig.class, PartitioningSerializer.wrap(JanksonConfigSerializer::new));
         Config = AutoConfig.getConfigHolder(ModConfig.class).getConfig();
         ModConfig.clearRuntimeCaches();
+        speedBuff = null;
 
         SOLValheim.getter = getter;
         DietConfig.reload();
+        ConfigValidator.validateStartup();
         FoodSync.initServer();
     }
 
