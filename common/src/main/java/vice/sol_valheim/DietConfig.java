@@ -97,6 +97,14 @@ public final class DietConfig {
         return CONFIG_PATH;
     }
 
+    public static void validateResolvedItems() {
+        for (String itemId : foods.keySet()) {
+            ResourceLocation id = ResourceLocation.tryParse(itemId);
+            if (id != null && !itemExists(id))
+                LOGGER.warn("Diet mapping references missing item '{}'", id);
+        }
+    }
+
     private static void ensureConfigExists() throws IOException {
         Files.createDirectories(CONFIG_PATH.getParent());
         if (Files.exists(CONFIG_PATH))
@@ -130,9 +138,6 @@ public final class DietConfig {
                 LOGGER.warn("Ignoring invalid diet item id '{}'", entry.id);
                 continue;
             }
-
-            if (clampPoints && !itemExists(itemId))
-                LOGGER.warn("Diet mapping references missing item '{}'", itemId);
 
             DietCategory category = DietCategory.fromId(entry.diet);
             if (category == null) {
