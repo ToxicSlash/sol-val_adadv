@@ -83,19 +83,32 @@ public class ValheimFoodData
             if (!existing.canEatEarly())
                 return;
 
+            // Re-eating the same food refreshes that exact slot. The consume
+            // event still fires normally, so its configured diet points are
+            // awarded again without clearing the player's existing diet.
             existing.ticksLeft = config.getTime();
             existing.item = stored;
             sol_valheim$sortEntries();
             return;
         }
 
-        // A full stomach cannot be used to cycle in a different food. The
-        // player must wait for an occupied slot to expire; only the same food
-        // may be refreshed once that food reaches its re-eat threshold.
-        if (ItemEntries.size() >= MaxItemSlots)
+        if (ItemEntries.size() < MaxItemSlots) {
+            ItemEntries.add(new EatenFoodItem(stored, config.getTime()));
+            sol_valheim$sortEntries();
+            return;
+        }
+
+        // Once a full stomach contains a food that has entered its re-eat
+        // window, that slot becomes replaceable. Prefer the entry closest to
+        // expiring when several slots are eligible. This lets players rotate
+        // through different foods and build diet points by actively eating,
+        // while foods that are still outside their re-eat window stay locked.
+        var replaceable = sol_valheim$getReplaceableEntry();
+        if (replaceable == null)
             return;
 
-        ItemEntries.add(new EatenFoodItem(stored, config.getTime()));
+        replaceable.item = stored;
+        replaceable.ticksLeft = config.getTime();
         sol_valheim$sortEntries();
     }
 
@@ -119,7 +132,7 @@ public class ValheimFoodData
         if (existing != null)
             return existing.canEatEarly();
 
-        return ItemEntries.size() < MaxItemSlots;
+        return ItemEntries.size() < MaxItemSlots || sol_valheim$getReplaceableEntry() != null;
     }
 
     public EatenFoodItem getEatenFood(ItemStack food) {
@@ -128,6 +141,17 @@ public class ValheimFoodData
                 return entry;
         }
         return null;
+    }
+
+    private EatenFoodItem sol_valheim$getReplaceableEntry() {
+        EatenFoodItem best = null;
+        for (var entry : ItemEntries) {
+            if (!entry.canEatEarly())
+                continue;
+            if (best == null || entry.ticksLeft < best.ticksLeft)
+                best = entry;
+        }
+        return best;
     }
 
     public boolean hasActiveFood() {
