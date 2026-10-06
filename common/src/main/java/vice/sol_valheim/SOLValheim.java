@@ -61,7 +61,6 @@ public class SOLValheim
 
         SOLValheim.getter = getter;
         DietConfig.reload();
-        ConfigValidator.validateStartup();
         FoodSync.initServer();
     }
 
