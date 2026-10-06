@@ -8,10 +8,9 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import vice.sol_valheim.DietSystem;
+import vice.sol_valheim.ConsumptionSystem;
 import vice.sol_valheim.ModConfig;
 import vice.sol_valheim.SOLValheim;
-import vice.sol_valheim.accessors.DietDataAccessor;
 import vice.sol_valheim.accessors.PlayerEntityMixinDataAccessor;
 
 @Mixin(ServerPlayer.class)
@@ -34,10 +33,9 @@ public class ServerPlayerMixin
         if (ModConfig.getFoodConfig(useItem) == null)
             return;
 
-        var foodData = ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData();
-        if (!foodData.canEat(useItem)) {
+        if (!ConsumptionSystem.canConsume(player, useItem)) {
             player.stopUsingItem();
-            SOLValheim.syncFoodData(player, foodData);
+            SOLValheim.syncFoodData(player, ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData());
             ci.cancel();
             return;
         }
@@ -56,13 +54,8 @@ public class ServerPlayerMixin
         var consumed = sol_valheim$pendingDrink;
         sol_valheim$pendingDrink = ItemStack.EMPTY;
 
-        var foodData = ((PlayerEntityMixinDataAccessor) player).sol_valheim$getFoodData();
-        // An edible drink may already have passed through Player.eat during
-        // vanilla completion. eatItem is idempotent here because a newly filled
-        // drink slot cannot immediately refresh itself.
-        foodData.eatItem(consumed);
-        SOLValheim.syncFoodData(player, foodData);
-
-        DietSystem.onConsumed(player, consumed, ((DietDataAccessor) player).sol_valheim$getDietData());
+        // Edible drinks may already have committed through Player.eat. The
+        // shared service re-validates the stomach, making this safe and idempotent.
+        ConsumptionSystem.commit(player, consumed);
     }
 }
