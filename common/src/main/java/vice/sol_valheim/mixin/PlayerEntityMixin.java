@@ -8,7 +8,6 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -16,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import vice.sol_valheim.ConsumptionSystem;
 import vice.sol_valheim.ModConfig;
 import vice.sol_valheim.SOLValheim;
 import vice.sol_valheim.ValheimFoodData;
@@ -26,6 +26,9 @@ public abstract class PlayerEntityMixin extends LivingEntity implements PlayerEn
 {
     @Unique
     private ValheimFoodData sol_valheim$food_data = new ValheimFoodData();
+
+    @Unique
+    private ItemStack sol_valheim$pendingFood = ItemStack.EMPTY;
 
     protected PlayerEntityMixin(EntityType<? extends LivingEntity> entityType, Level level) {
         super(entityType, level);
@@ -59,33 +62,36 @@ public abstract class PlayerEntityMixin extends LivingEntity implements PlayerEn
     }
 
     @Inject(at = {@At("HEAD")}, method = {"eat(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/item/ItemStack;)Lnet/minecraft/world/item/ItemStack;"}, cancellable = true)
-    private void onEatFood(Level world, ItemStack stack, CallbackInfoReturnable<ItemStack> info) {
-        if (stack.getItem() == Items.ROTTEN_FLESH) {
-            if (sol_valheim$food_data.hasActiveFood()) {
-                sol_valheim$food_data.clear();
-                sol_valheim$trackData();
-            }
-            return;
-        }
+    private void sol_valheim$validateFoodCompletion(Level world, ItemStack stack, CallbackInfoReturnable<ItemStack> info) {
+        sol_valheim$pendingFood = ItemStack.EMPTY;
+        Player player = (Player) (Object) this;
 
-        // Validate again at completion. The stomach may have changed while the
-        // use animation was running, especially with client/server latency.
-        if (!sol_valheim$food_data.canEat(stack)) {
-            sol_valheim$trackData();
+        // Validate again when the use completes. The stomach can change while
+        // the animation is running due to latency, sleep skipping or another consume.
+        if (!ConsumptionSystem.canConsume(player, stack)) {
+            if (!world.isClientSide && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)
+                SOLValheim.syncFoodData(serverPlayer, sol_valheim$food_data);
             info.setReturnValue(stack);
             info.cancel();
             return;
         }
 
-        sol_valheim$food_data.eatItem(stack);
-        sol_valheim$trackData();
+        sol_valheim$pendingFood = stack.copy();
+        sol_valheim$pendingFood.setCount(1);
+    }
 
-        #if PRE_CURRENT_MC_1_19_2
-        if (!this.level.isClientSide)
-        #elif POST_CURRENT_MC_1_20_1
-        if (!this.level().isClientSide)
-        #endif
-            sol_valheim$refreshFoodStats((Player) (Object) this);
+    @Inject(at = {@At("TAIL")}, method = {"eat(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/item/ItemStack;)Lnet/minecraft/world/item/ItemStack;"})
+    private void sol_valheim$commitFoodCompletion(Level world, ItemStack stack, CallbackInfoReturnable<ItemStack> info) {
+        ItemStack consumed = sol_valheim$pendingFood;
+        sol_valheim$pendingFood = ItemStack.EMPTY;
+        if (world.isClientSide || consumed.isEmpty())
+            return;
+
+        Player player = (Player) (Object) this;
+        if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+            ConsumptionSystem.commit(serverPlayer, consumed);
+            sol_valheim$refreshFoodStats(player);
+        }
     }
 
     @Inject(at = {@At("HEAD")}, method = {"tick"})
@@ -96,8 +102,8 @@ public abstract class PlayerEntityMixin extends LivingEntity implements PlayerEn
         var level = this.level();
         #endif
 
-        // Client-side prediction keeps HUD countdowns smooth. The server sends
-        // a correction once per second and immediately after state changes.
+        // Client prediction keeps the HUD countdown smooth. The server now
+        // syncs immediately on actual state changes plus a sparse safety resync.
         if (level.isClientSide) {
             if (sol_valheim$food_data.hasActiveFood())
                 sol_valheim$food_data.tick();
@@ -113,16 +119,22 @@ public abstract class PlayerEntityMixin extends LivingEntity implements PlayerEn
         }
 
         Player player = (Player) (Object) this;
-        boolean hasFood = sol_valheim$food_data.hasActiveFood();
-        if (hasFood)
-            sol_valheim$food_data.tick();
+        boolean hadFood = sol_valheim$food_data.hasActiveFood();
+        boolean stomachChanged = hadFood && sol_valheim$food_data.tick();
+        if (stomachChanged)
+            sol_valheim$trackData();
 
         if (player.tickCount % 20 == 0) {
-            if (hasFood || sol_valheim$food_data.hasActiveFood()) {
-                sol_valheim$trackData();
+            if (sol_valheim$food_data.hasActiveFood())
                 sol_valheim$refreshFoodEffects(player);
-            }
             sol_valheim$refreshFoodStats(player);
+        }
+
+        int safetySeconds = Math.max(0, SOLValheim.Config.common.stomachSafetySyncSeconds);
+        if (safetySeconds > 0 && sol_valheim$food_data.hasActiveFood()) {
+            int interval = Math.max(20, safetySeconds * 20);
+            if (player.tickCount % interval == 0)
+                sol_valheim$trackData();
         }
 
         int regenInterval = Math.max(1, Math.round(5f * Math.max(0.1f, SOLValheim.Config.common.regenSpeedModifier)));
@@ -225,6 +237,7 @@ public abstract class PlayerEntityMixin extends LivingEntity implements PlayerEn
 
     @Inject(at = {@At("TAIL")}, method = {"addAdditionalSaveData(Lnet/minecraft/nbt/CompoundTag;)V"})
     private void onWriteCustomData(CompoundTag nbt, CallbackInfo info) {
+        nbt.putInt("sol_valheim_data_version", ValheimFoodData.DATA_VERSION);
         nbt.put("sol_food_data", sol_valheim$food_data.save(new CompoundTag()));
     }
 
