@@ -1,7 +1,5 @@
 package vice.sol_valheim;
 
-
-
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.architectury.event.events.client.ClientGuiEvent;
 import dev.architectury.platform.Platform;
@@ -39,52 +37,65 @@ public class FoodHUD implements ClientGuiEvent.RenderHud
 {
     static Minecraft client;
 
-    private static int HudHeight = 10;
-
     public FoodHUD() {
         ClientGuiEvent.RENDER_HUD.register(this);
         client = Minecraft.getInstance();
     }
 
-
     @Override
     public void renderHud(#if PRE_CURRENT_MC_1_19_2 PoseStack #elif POST_CURRENT_MC_1_20_1 GuiGraphics #endif graphics, float tickDelta) {
-        if (client.player == null)
+        if (client.player == null || SOLValheim.Config == null || SOLValheim.Config.client == null)
             return;
 
         var pose = #if PRE_CURRENT_MC_1_19_2 graphics #elif POST_CURRENT_MC_1_20_1 graphics.pose() #endif;
         pose.pushPose();
         try {
             var solPlayer = (PlayerEntityMixinDataAccessor) client.player;
-
             var foodData = solPlayer.sol_valheim$getFoodData();
             if (foodData == null)
                 return;
 
-            boolean useLargeIcons = SOLValheim.Config.client.useLargeIcons;
+            var hudConfig = SOLValheim.Config.client;
+            boolean useLargeIcons = hudConfig.useLargeIcons;
+            float hudScale = Math.max(0.25f, Math.min(3.0f, hudConfig.foodHudScale));
+            int spacing = Math.max(0, Math.min(32, hudConfig.foodHudSpacing));
 
-            int width = client.getWindow().getGuiScaledWidth() / 2 + 91;
-            int height = client.getWindow().getGuiScaledHeight() - 39 - (useLargeIcons ? 6 : 0);
+            // Match vanilla's hunger-bar anchor by default: right side of the
+            // hotbar at the same vertical level. Offsets are applied in GUI
+            // pixels before the stomach HUD scale is applied.
+            int anchorX = client.getWindow().getGuiScaledWidth() / 2 + 91 + hudConfig.foodHudXOffset;
+            int anchorY = client.getWindow().getGuiScaledHeight() - 39 + hudConfig.foodHudYOffset;
+
+            pose.translate(anchorX, anchorY, 0f);
+            pose.scale(hudScale, hudScale, 1f);
 
             int offset = 1;
             int size = useLargeIcons ? 14 : 9;
+            int localHeight = useLargeIcons ? -6 : 0;
 
             for (var food : foodData.ItemEntries) {
                 if (ModConfig.getFoodConfig(food.item) == null)
                     continue;
 
-                renderFoodSlot(graphics, food, width, size, offset, height, useLargeIcons);
+                renderFoodSlot(graphics, food, size, offset, localHeight, useLargeIcons, hudConfig.foodHudRightAligned, spacing);
                 offset++;
             }
 
             if (foodData.DrinkSlot != null)
-                renderFoodSlot(graphics, foodData.DrinkSlot, width, size, offset, height, useLargeIcons);
+                renderFoodSlot(graphics, foodData.DrinkSlot, size, offset, localHeight, useLargeIcons, hudConfig.foodHudRightAligned, spacing);
         } finally {
             pose.popPose();
         }
     }
 
-    private static void renderFoodSlot(#if PRE_CURRENT_MC_1_19_2 PoseStack #elif POST_CURRENT_MC_1_20_1 GuiGraphics #endif graphics, ValheimFoodData.EatenFoodItem food, int width, int size, int offset, int height, boolean useLargeIcons)
+    private static void renderFoodSlot(#if PRE_CURRENT_MC_1_19_2 PoseStack #elif POST_CURRENT_MC_1_20_1 GuiGraphics #endif graphics,
+                                       ValheimFoodData.EatenFoodItem food,
+                                       int size,
+                                       int offset,
+                                       int height,
+                                       boolean useLargeIcons,
+                                       boolean rightAligned,
+                                       int spacing)
     {
         var foodConfig = ModConfig.getFoodConfig(food.item);
         if (foodConfig == null)
@@ -94,7 +105,11 @@ public class FoodHUD implements ClientGuiEvent.RenderHud
         int bgColor = isDrink ? FastColor.ARGB32.color(96, 52, 104, 163) : FastColor.ARGB32.color(96, 0, 0, 0);
         int yellow = FastColor.ARGB32.color(255, 255, 191, 0);
 
-        int startWidth = width - (size * offset) - offset + 1;
+        int step = size + spacing;
+        int startWidth = rightAligned
+                ? -(step * offset) + spacing
+                : step * (offset - 1);
+
         float ticksLeftPercent = Float.min(1.0F, (float) food.ticksLeft / foodConfig.getTime());
         int barHeight = Integer.max(1, (int)((size + 2f) * ticksLeftPercent));
         int barColor = ticksLeftPercent < 0.2 ?
@@ -161,7 +176,6 @@ public class FoodHUD implements ClientGuiEvent.RenderHud
         var itemRenderer = client.getItemRenderer();
         var bakedModel = itemRenderer.getModel(stack, null, null, 0);
 
-        //itemRenderer.textureManager.getTexture(TextureAtlas.LOCATION_BLOCKS).setFilter(false, false);
         RenderSystem.setShaderTexture(0, TextureAtlas.LOCATION_BLOCKS);
         RenderSystem.enableBlend();
         RenderSystem.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
@@ -209,6 +223,4 @@ public class FoodHUD implements ClientGuiEvent.RenderHud
         graphics.drawString(client.font, str, x, y, color);
         #endif
     }
-
-
 }
