@@ -60,12 +60,18 @@ public final class DietFabricHooks {
                             .executes(context -> reloadDiet(context.getSource().getPlayerOrException()))));
         });
 
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            ConfigValidator.validateStartup();
+            DietConfig.validateResolvedItems();
+        });
+
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
             if (!success || !DietConfig.reload())
                 return;
 
             ModConfig.clearRuntimeCaches();
             ConfigValidator.validateStartup();
+            DietConfig.validateResolvedItems();
             for (var player : server.getPlayerList().getPlayers()) {
                 var data = ((DietDataAccessor) player).sol_valheim$getDietData();
                 DietSystem.onConfigReload(player, data);
@@ -172,6 +178,7 @@ public final class DietFabricHooks {
 
         ModConfig.clearRuntimeCaches();
         ConfigValidator.validateStartup();
+        DietConfig.validateResolvedItems();
         var server = sender.getServer();
         for (var player : server.getPlayerList().getPlayers()) {
             DietSystem.onConfigReload(player, ((DietDataAccessor) player).sol_valheim$getDietData());
